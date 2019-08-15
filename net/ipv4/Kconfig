@@ -761,7 +761,7 @@ config IP_SWEN
 	---help---
 	  If unsure, say N.
 
-config IP_FIAR
+config IP_6IN4
 	bool "IP: the FIAR scheme for embedding IPv6 subspaces in IPv4 packets"
 	default n
 	---help---
