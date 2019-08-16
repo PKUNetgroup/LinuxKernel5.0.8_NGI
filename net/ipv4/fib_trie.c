@@ -118,396 +118,21 @@ static int call_fib_entry_notifiers(struct net *net,
 	return call_fib4_notifiers(net, event_type, &info.info);
 }
 
-#define MAX_STAT_DEPTH 128
+#define MAX_STAT_DEPTH 32
 
-#define KEYLENGTH (8 * sizeof(t_key))
-#define KEY_MAX ((unsigned int)~0)
+#define KEYLENGTH	(8*sizeof(t_key))
+#define KEY_MAX		((t_key)~0)
 
-/*struct in6_addr {
-	union {
-		__u8		u6_addr8[16];
-#if __UAPI_DEF_IN6_ADDR_ALT
-		__be16		u6_addr16[8];
-		__be32		u6_addr32[4];
-#endif
-	} in6_u;
-#define s6_addr			in6_u.u6_addr8
-#if __UAPI_DEF_IN6_ADDR_ALT
-#define s6_addr16		in6_u.u6_addr16
-#define s6_addr32		in6_u.u6_addr32
-#endif
-};
-*/
+typedef unsigned int t_key;
 
-//#ifdef CONFIG_PKUNETGROUP
-typedef struct in6_addr t_key;
-//#else
-//typedef unsigned int t_key;
-//#endif
-
-#define FIAR_H 0x05
-#define FIAR_BASE 0xa0
-#define FIAR_COMPATIBLE 0xa0
-#define FIAR_MAPPED 0xa8
-#define FIAR_TRANSLATED 0xa2
-#define FIAR_EMBEDDED_32 0xa3
-#define FIAR_EMBEDDED_40 0xa4
-#define FIAR_EMBEDDED_48 0xa5
-#define FIAR_EMBEDDED_56 0xa6
-#define FIAR_EMBEDDED_64 0xa7
-#define FIAR_EMBEDDED_96 0xa9
-
-t_key Key_max(void)
-{
-	t_key max;
-	int i;
-	for (i = 0; i < 16; i++) {
-		max.s6_addr[i] = 0xff;
-	}
-	return max;
-}
-
-t_key Key_zero(void)
-{
-	t_key zero;
-	int i;
-	for (i = 0; i < 16; i++) {
-		zero.s6_addr[i] = 0;
-	}
-	return zero;
-}
-t_key Key_xor(t_key a, t_key b)
-{
-	t_key result;
-	int i;
-	for (i = 0; i < 16; i++) {
-		result.s6_addr[i] = a.s6_addr[i] ^ b.s6_addr[i];
-	}
-	return result;
-}
-
-t_key Key_or(t_key a, t_key b)
-{
-	t_key result;
-	int i;
-	for (i = 0; i < 16; i++) {
-		result.s6_addr[i] = a.s6_addr[i] | b.s6_addr[i];
-	}
-	return result;
-}
-
-t_key Key_shift_right(t_key key, unsigned char p)
-{
-	int i;
-	t_key result = Key_zero();
-	int shift = p / 8;
-	int nr = p % 8;
-	int nl = 8 - nr;
-	for (i = shift; i < 16; i++) {
-		if (i == shift) {
-			result.s6_addr[i] = key.s6_addr[i - shift] >> nr;
-		} else {
-			result.s6_addr[i] = (key.s6_addr[i - shift - 1] << nl) |
-					    (key.s6_addr[i - shift] >> nr);
-		}
-	}
-	return result;
-}
-
-t_key Key_shift_left(t_key key, unsigned char p)
-{
-	int i;
-	t_key result = Key_zero();
-	int shift = p / 8;
-	int nl = p % 8;
-	int nr = 8 - nl;
-	for (i = 0; i + shift < 16; i++) {
-		if (i + shift == 15) {
-			result.s6_addr[i] = key.s6_addr[i + shift] << nl;
-		} else {
-			result.s6_addr[i] = (key.s6_addr[i + shift] << nl) |
-					    (key.s6_addr[i + shift + 1] >> nr);
-		}
-	}
-	return result;
-}
-
-unsigned long Key_toint(t_key key)
-{
-	int i;
-	unsigned long result = 0;
-	for (i = 12; i < 16; i++) {
-		result += key.s6_addr[i] << (8 * (15 - i));
-	}
-	return result;
-}
-
-t_key Key_fromint(unsigned long n)
-{
-	int i;
-	t_key result = Key_zero();
-	for (i = 0; i < 4; i++) {
-		result.s6_addr[15 - i] = n % 256;
-		n /= 256;
-	}
-	return result;
-}
-
-t_key Key_map(u32 key)
-{
-	int i;
-	t_key result = Key_zero();
-	for (i = 0; i < 4; i++) {
-		result.s6_addr[15 - i] = key % 256;
-		key /= 256;
-	}
-	for (i = 4; i < 6; i++) {
-		result.s6_addr[15 - i] = 0xff;
-	}
-	result.s6_addr[0] = FIAR_H;
-	result.s6_addr[1] = FIAR_MAPPED;
-	return result;
-}
-
-t_key Key_compatible(u32 key)
-{
-	int i;
-	t_key result = Key_zero();
-	for (i = 0; i < 4; i++) {
-		result.s6_addr[15 - i] = key % 256;
-		key /= 256;
-	}
-	result.s6_addr[0] = FIAR_H;
-	result.s6_addr[1] = FIAR_COMPATIBLE;
-	return result;
-}
-
-t_key Key_embedded_32(u32 key)
-{
-	t_key result = Key_zero();
-	
-	result.s6_addr[7] = key % 256;
-	key /= 256;
-	result.s6_addr[6] = key % 256;
-	key /= 256;
-	result.s6_addr[5] = key % 256;
-	key /= 256;
-	result.s6_addr[4] = key % 256;
-	
-	result.s6_addr[0] = FIAR_H;
-	result.s6_addr[1] = FIAR_EMBEDDED_32;
-	return result;
-}
-
-t_key Key_embedded_40(u32 key)
-{
-	t_key result = Key_zero();
-
-	result.s6_addr[9] = key % 256;
-	key /= 256;
-	result.s6_addr[7] = key % 256;
-	key /= 256;
-	result.s6_addr[6] = key % 256;
-	key /= 256;
-	result.s6_addr[5] = key % 256;
-
-	result.s6_addr[0] = FIAR_H;
-	result.s6_addr[1] = FIAR_EMBEDDED_40;
-	return result;
-}
-
-t_key Key_embedded_48(u32 key)
-{
-	t_key result = Key_zero();
-
-	result.s6_addr[10] = key % 256;
-	key /= 256;
-	result.s6_addr[9] = key % 256;
-	key /= 256;
-	result.s6_addr[7] = key % 256;
-	key /= 256;
-	result.s6_addr[6] = key % 256;
-
-	result.s6_addr[0] = FIAR_H;
-	result.s6_addr[1] = FIAR_EMBEDDED_48;
-	return result;
-}
-
-t_key Key_embedded_56(u32 key)
-{
-	t_key result = Key_zero();
-
-	result.s6_addr[11] = key % 256;
-	key /= 256;
-	result.s6_addr[10] = key % 256;
-	key /= 256;
-	result.s6_addr[9] = key % 256;
-	key /= 256;
-	result.s6_addr[7] = key % 256;
-
-	result.s6_addr[0] = FIAR_H;
-	result.s6_addr[1] = FIAR_EMBEDDED_56;
-	return result;
-}
-
-t_key Key_embedded_64(u32 key)
-{
-	t_key result = Key_zero();
-
-	result.s6_addr[12] = key % 256;
-	key /= 256;
-	result.s6_addr[11] = key % 256;
-	key /= 256;
-	result.s6_addr[10] = key % 256;
-	key /= 256;
-	result.s6_addr[9] = key % 256;
-
-	result.s6_addr[0] = FIAR_H;
-	result.s6_addr[1] = FIAR_EMBEDDED_64;
-	return result;
-}
-
-t_key Key_addone(t_key key)
-{
-	int i;
-	t_key result = key;
-	for (i = 15; i >= 0; i--) {
-		result.s6_addr[i]++;
-		if (result.s6_addr[i]) {
-			break;
-		}
-	}
-	return result;
-}
-
-unsigned long Key_fls(t_key key)
-{
-	int i;
-	unsigned long result;
-	__u8 index;
-	int count = -1;
-	for (i = 0; i < 16; i++) {
-		if (key.s6_addr[i]) {
-			index = key.s6_addr[i];
-			break;
-		}
-	}
-	if (i == 16)
-		return 0;
-	while (index) {
-		index /= 2;
-		count++;
-	}
-	result = (15 - i) * 8 + count;
-	return result;
-}
-
-unsigned long Key_frs(t_key key)
-{
-	int i;
-	unsigned long result;
-	__u8 index;
-	int count = 0;
-	for (i = 15; i >= 0; i--) {
-		if (key.s6_addr[i]) {
-			index = key.s6_addr[i];
-			break;
-		}
-	}
-	if (i < 0) {
-		return 0;
-	}
-	while (!(index & 1)) {
-		index /= 2;
-		count++;
-	}
-	result = (15 - i) * 8 + count;
-	return result;
-}
-
-bool Key_isPrivate(u32 key)
-{
-	int pA = (key >> 24 == 10);
-	int pB = (key << 8 >> 28 == 1) && (key >> 24 == 172);
-	int pC = (key << 8 >> 24 == 168) && (key >> 24 == 192);
-	return pA | pB | pC;
-}
-
-int Key_form(u32 key)
-{
-	int judge = key >> 24;
-	int form = (key << 8 >> 24) - 10;
-	if (judge != 10)
-		return 1;
-	return form;
-}
-
-bool Key_mismatch(t_key a, t_key b)
-{
-	t_key compare = Key_xor(a, b);
-	return (Key_fls(compare) >= Key_frs(b));
-}
-
-bool Key_greater(t_key a, t_key b)
-{
-	int i;
-	for (i = 0; i < 16; i++) {
-		if (a.s6_addr[i] > b.s6_addr[i]) {
-			return true;
-		}
-	}
-	return false;
-}
-
-bool Key_nzero(t_key key)
-{
-	int i;
-	for (i = 0; i < 16; i++) {
-		if (key.s6_addr[i]) {
-			return true;
-		}
-	}
-	return false;
-}
-
-static inline const char *Key_type(t_key key)
-{
-	/*
-	    if (t < __RTN_MAX && rtn_type_names[t])
-	    	return rtn_type_names[t];
-	*/
-	switch (key.s6_addr[1]) {
-	case FIAR_MAPPED:
-		return "mapped";
-	case FIAR_COMPATIBLE:
-		return "compatible";
-	case FIAR_TRANSLATED:
-		return "translated";
-	case FIAR_EMBEDDED_32:
-		return "embedded-32";
-	case FIAR_EMBEDDED_40:
-		return "embedded-40";
-	case FIAR_EMBEDDED_48:
-		return "embedded-48";
-	case FIAR_EMBEDDED_56:
-		return "embedded-56";
-	case FIAR_EMBEDDED_64:
-		return "embedded-64";
-	case FIAR_EMBEDDED_96:
-		return "embedded-96";
-	default:
-		return "none";
-	}
-}
-
-#define IS_TRIE(n) ((n)->pos >= KEYLENGTH)
-#define IS_TNODE(n) ((n)->bits)
-#define IS_LEAF(n) (!(n)->bits)
+#define IS_TRIE(n)	((n)->pos >= KEYLENGTH)
+#define IS_TNODE(n)	((n)->bits)
+#define IS_LEAF(n)	(!(n)->bits)
 
 struct key_vector {
 	t_key key;
-	unsigned char pos; /* 2log(KEYLENGTH) bits needed */
-	unsigned char bits; /* 2log(KEYLENGTH) bits needed */
+	unsigned char pos;		/* 2log(KEYLENGTH) bits needed */
+	unsigned char bits;		/* 2log(KEYLENGTH) bits needed */
 	unsigned char slen;
 	union {
 		/* This list pointer if valid if (pos | bits) == 0 (LEAF) */
@@ -519,15 +144,15 @@ struct key_vector {
 
 struct tnode {
 	struct rcu_head rcu;
-	unsigned int empty_children; /* KEYLENGTH bits needed */
-	unsigned int full_children; /* KEYLENGTH bits needed */
+	t_key empty_children;		/* KEYLENGTH bits needed */
+	t_key full_children;		/* KEYLENGTH bits needed */
 	struct key_vector __rcu *parent;
 	struct key_vector kv[1];
 #define tn_bits kv[0].bits
 };
 
-#define TNODE_SIZE(n) offsetof(struct tnode, kv[0].tnode[n])
-#define LEAF_SIZE TNODE_SIZE(1)
+#define TNODE_SIZE(n)	offsetof(struct tnode, kv[0].tnode[n])
+#define LEAF_SIZE	TNODE_SIZE(1)
 
 #ifdef CONFIG_IP_FIB_TRIE_STATS
 struct trie_use_stats {
@@ -600,28 +225,16 @@ static inline unsigned long child_length(const struct key_vector *tn)
 	return (1ul << tn->bits) & ~(1ul);
 }
 
-//#define get_cindex(key, kv) (((key) ^ (kv)->key) >> (kv)->pos)
-static inline unsigned long get_cindex(t_key key, struct key_vector *kv)
-{
-	t_key k_index = Key_xor(key, kv->key);
-	unsigned long index;
-	k_index = Key_shift_right(k_index, kv->pos);
-	index = Key_toint(k_index);
-
-	return index;
-}
+#define get_cindex(key, kv) (((key) ^ (kv)->key) >> (kv)->pos)
 
 static inline unsigned long get_index(t_key key, struct key_vector *kv)
 {
-	t_key k_index = Key_xor(key, kv->key);
-	unsigned long index;
-	k_index = Key_shift_right(k_index, kv->pos);
-	index = Key_toint(k_index);
+	unsigned long index = key ^ kv->key;
 
 	if ((BITS_PER_LONG <= KEYLENGTH) && (KEYLENGTH == kv->pos))
 		return 0;
 
-	return index;
+	return index >> kv->pos;
 }
 
 /* To understand this stuff, an understanding of keys and all their bits is
@@ -699,9 +312,9 @@ static inline void alias_free_mem_rcu(struct fib_alias *fa)
 	call_rcu(&fa->rcu, __alias_free_mem);
 }
 
-#define TNODE_KMALLOC_MAX                                                      \
+#define TNODE_KMALLOC_MAX \
 	ilog2((PAGE_SIZE - TNODE_SIZE(0)) / sizeof(struct key_vector *))
-#define TNODE_VMALLOC_MAX                                                      \
+#define TNODE_VMALLOC_MAX \
 	ilog2((SIZE_MAX - TNODE_SIZE(0)) / sizeof(struct key_vector *))
 
 static void __node_free_rcu(struct rcu_head *head)
@@ -735,12 +348,12 @@ static struct tnode *tnode_alloc(int bits)
 
 static inline void empty_child_inc(struct key_vector *n)
 {
-	++tn_info(n)->empty_children ?: ++tn_info(n)->full_children;
+	++tn_info(n)->empty_children ? : ++tn_info(n)->full_children;
 }
 
 static inline void empty_child_dec(struct key_vector *n)
 {
-	tn_info(n)->empty_children-- ?: tn_info(n)->full_children--;
+	tn_info(n)->empty_children-- ? : tn_info(n)->full_children--;
 }
 
 static struct key_vector *leaf_new(t_key key, struct fib_alias *fa)
@@ -788,9 +401,7 @@ static struct key_vector *tnode_new(t_key key, int pos, int bits)
 		tnode->empty_children = 1ul << bits;
 
 	tn = tnode->kv;
-	tn->key = (shift < KEYLENGTH) ?
-			  Key_shift_left(Key_shift_right(key, shift), shift) :
-			  Key_zero(); //fixed
+	tn->key = (shift < KEYLENGTH) ? (key >> shift) << shift : 0;
 	tn->pos = pos;
 	tn->bits = bits;
 	tn->slen = pos;
@@ -899,7 +510,8 @@ static void tnode_free(struct key_vector *tn)
 	}
 }
 
-static struct key_vector *replace(struct trie *t, struct key_vector *oldtnode,
+static struct key_vector *replace(struct trie *t,
+				  struct key_vector *oldtnode,
 				  struct key_vector *tn)
 {
 	struct key_vector *tp = node_parent(oldtnode);
@@ -918,17 +530,17 @@ static struct key_vector *replace(struct trie *t, struct key_vector *oldtnode,
 	/* resize children now that oldtnode is freed */
 	for (i = child_length(tn); i;) {
 		struct key_vector *inode = get_child(tn, --i);
-		printk("replace resize\n");
+
 		/* resize child node */
 		if (tnode_full(tn, inode))
 			tn = resize(t, inode);
-		printk("replace resize end\n");
 	}
 
 	return tp;
 }
 
-static struct key_vector *inflate(struct trie *t, struct key_vector *oldtnode)
+static struct key_vector *inflate(struct trie *t,
+				  struct key_vector *oldtnode)
 {
 	struct key_vector *tn;
 	unsigned long i;
@@ -948,8 +560,7 @@ static struct key_vector *inflate(struct trie *t, struct key_vector *oldtnode)
 	 * point to existing tnodes and the links between our allocated
 	 * nodes.
 	 */
-	for (i = child_length(oldtnode), m = Key_fromint(1u << tn->pos); i;) {
-		//fixed
+	for (i = child_length(oldtnode), m = 1u << tn->pos; i;) {
 		struct key_vector *inode = get_child(oldtnode, --i);
 		struct key_vector *node0, *node1;
 		unsigned long j, k;
@@ -988,8 +599,7 @@ static struct key_vector *inflate(struct trie *t, struct key_vector *oldtnode)
 		 * node0 and node1. So... we synthesize that bit in the
 		 * two new keys.
 		 */
-		node1 = tnode_new(Key_or(inode->key, m), inode->pos,
-				  inode->bits - 1); //fixed
+		node1 = tnode_new(inode->key | m, inode->pos, inode->bits - 1);
 		if (!node1)
 			goto nomem;
 		node0 = tnode_new(inode->key, inode->pos, inode->bits - 1);
@@ -1016,7 +626,6 @@ static struct key_vector *inflate(struct trie *t, struct key_vector *oldtnode)
 		put_child(tn, 2 * i, node0);
 	}
 
-	printk("inflate\n");
 	/* setup the parent pointers into and out of this node */
 	return replace(t, oldtnode, tn);
 nomem:
@@ -1026,7 +635,8 @@ notnode:
 	return NULL;
 }
 
-static struct key_vector *halve(struct trie *t, struct key_vector *oldtnode)
+static struct key_vector *halve(struct trie *t,
+				struct key_vector *oldtnode)
 {
 	struct key_vector *tn;
 	unsigned long i;
@@ -1052,7 +662,7 @@ static struct key_vector *halve(struct trie *t, struct key_vector *oldtnode)
 
 		/* At least one of the children is empty */
 		if (!node1 || !node0) {
-			put_child(tn, i / 2, node1 ?: node0);
+			put_child(tn, i / 2, node1 ? : node0);
 			continue;
 		}
 
@@ -1072,7 +682,6 @@ static struct key_vector *halve(struct trie *t, struct key_vector *oldtnode)
 	}
 
 	/* setup the parent pointers into and out of this node */
-	printk("halve\n");
 	return replace(t, oldtnode, tn);
 nomem:
 	/* all pointers should be clean so we are done */
@@ -1081,7 +690,8 @@ notnode:
 	return NULL;
 }
 
-static struct key_vector *collapse(struct trie *t, struct key_vector *oldtnode)
+static struct key_vector *collapse(struct trie *t,
+				   struct key_vector *oldtnode)
 {
 	struct key_vector *n, *tp;
 	unsigned long i;
@@ -1118,7 +728,7 @@ static unsigned char update_suffix(struct key_vector *tn)
 	 * why we start with a stride of 2 since a stride of 1 would
 	 * represent the nodes with suffix length equal to tn->pos
 	 */
-	for (i = 0, stride = 0x2ul; i < child_length(tn); i += stride) {
+	for (i = 0, stride = 0x2ul ; i < child_length(tn); i += stride) {
 		struct key_vector *n = get_child(tn, i);
 
 		if (!n || (n->slen <= slen))
@@ -1249,48 +859,8 @@ static struct key_vector *resize(struct trie *t, struct key_vector *tn)
 	unsigned long cindex = get_index(tn->key, tp);
 	int max_work = MAX_WORK;
 
-	struct key_vector *test = get_child(tp, cindex);
-	struct key_vector *tpp = node_parent(tp);
-	
-	int i;
-	__be32 val = htonl(Key_toint(tp->key));
-	for (i = 0; i < 12; ++i) {
-		printk("%02x", tp->key.s6_addr[i]);
-		if (i % 2 == 1)
-			printk(":");
-	}
-	printk("%pI4\n  %d %d", &val, tp->pos, tp->bits);
-
-	val = htonl(Key_toint(test->key));
-	for (i = 0; i < 12; ++i) {
-		printk("%02x", test->key.s6_addr[i]);
-		if (i % 2 == 1)
-			printk(":");
-	}
-	printk("%pI4\n %d  %d", &val, test->pos,test->bits);
-
-	val = htonl(Key_toint(tn->key));
-	for (i = 0; i < 12; ++i) {
-		printk("%02x", tn->key.s6_addr[i]);
-		if (i % 2 == 1)
-			printk(":");
-	}
-	printk("%pI4\n  %d %d", &val, tn->pos, tn->bits);
-	
-	val = htonl(Key_toint(tpp->key));
-	for (i = 0; i < 12; ++i) {
-		printk("%02x", tpp->key.s6_addr[i]);
-		if (i % 2 == 1)
-			printk(":");
-	}
-	printk("%pI4\n  %d %d", &val, tpp->pos, tpp->bits);
-	printk("index %d\n", cindex);
-	printk("%d %d %d %d %d %d\n", tp->tnode[0], tp->tnode[1], tp->tnode[2],
-	       tp->tnode[3], test, tn);
-	printk("%d %d %d %d\n", tpp->tnode[0], tpp->tnode[1], tpp->tnode[2],
-	       tpp->tnode[3]);
-	pr_debug("In tnode_resize %p inflate_threshold=%d threshold=%d\n", tn,
-		 inflate_threshold, halve_threshold);
+	pr_debug("In tnode_resize %p inflate_threshold=%d threshold=%d\n",
+		 tn, inflate_threshold, halve_threshold);
 
 	/* track the tnode via the pointer from the parent instead of
 	 * doing it ourselves.  This way we can let RCU fully do its
@@ -1368,8 +938,8 @@ static void node_push_suffix(struct key_vector *tn, unsigned char slen)
 }
 
 /* rcu_read_lock needs to be hold by caller from readside */
-static struct key_vector *fib_find_node(struct trie *t, struct key_vector **tp,
-					t_key key) //fixed
+static struct key_vector *fib_find_node(struct trie *t,
+					struct key_vector **tp, u32 key)
 {
 	struct key_vector *pn, *n = t->kv;
 	unsigned long index = 0;
@@ -1413,15 +983,15 @@ static struct key_vector *fib_find_node(struct trie *t, struct key_vector **tp,
 /* Return the first fib alias matching TOS with
  * priority less than or equal to PRIO.
  */
-static struct fib_alias *fib_find_alias(struct hlist_head *fah, u8 slen, u8 tos,
-					u32 prio, u32 tb_id)
+static struct fib_alias *fib_find_alias(struct hlist_head *fah, u8 slen,
+					u8 tos, u32 prio, u32 tb_id)
 {
 	struct fib_alias *fa;
 
 	if (!fah)
 		return NULL;
 
-	hlist_for_each_entry (fa, fah, fa_list) {
+	hlist_for_each_entry(fa, fah, fa_list) {
 		if (fa->fa_slen < slen)
 			continue;
 		if (fa->fa_slen != slen)
@@ -1441,26 +1011,22 @@ static struct fib_alias *fib_find_alias(struct hlist_head *fah, u8 slen, u8 tos,
 
 static void trie_rebalance(struct trie *t, struct key_vector *tn)
 {
-	printk("trie_reblance\n");
 	while (!IS_TRIE(tn))
 		tn = resize(t, tn);
-	printk("trie_reblance end\n");
 }
 
 static int fib_insert_node(struct trie *t, struct key_vector *tp,
 			   struct fib_alias *new, t_key key)
 {
 	struct key_vector *n, *l;
-	int i;
-	__be32 val = htonl(Key_toint(tp->key));
-	
+
 	l = leaf_new(key, new);
 	if (!l)
 		goto noleaf;
 
 	/* retrieve child from parent node */
 	n = get_child(tp, get_index(key, tp));
-	printk("%d", get_index(key, tp));
+
 	/* Case 2: n is a LEAF or a TNODE and the key doesn't match.
 	 *
 	 *  Add a new tnode here
@@ -1469,24 +1035,8 @@ static int fib_insert_node(struct trie *t, struct key_vector *tp,
 	 */
 	if (n) {
 		struct key_vector *tn;
-		for (i = 0; i < 12; ++i) {
-			printk("%02x", tp->key.s6_addr[i]);
-			if (i % 2 == 1)
-				printk(":");
-		}
-		printk("parent  %pI4   %d %d\n", &val, tp->pos, tp->bits);
 
-		val = htonl(Key_toint(n->key));
-		for (i = 0; i < 12; ++i) {
-			printk("%02x", n->key.s6_addr[i]);
-			if (i % 2 == 1)
-				printk(":");
-		}
-		printk("changed: %pI4  %d %d\n", &val, n->pos, tp->bits);
-		
-
-		tn = tnode_new(key, Key_fls(Key_xor(key, n->key)), 1); //fixed
-		printk("new node pos %d\n", tn->pos);
+		tn = tnode_new(key, __fls(key ^ n->key), 1);
 		if (!tn)
 			goto notnode;
 
@@ -1506,8 +1056,6 @@ static int fib_insert_node(struct trie *t, struct key_vector *tp,
 	node_push_suffix(tp, new->fa_slen);
 	NODE_INIT_PARENT(l, tp);
 	put_child_root(tp, key, l);
-
-	printk("before resize");
 	trie_rebalance(t, tp);
 
 	return 0;
@@ -1532,7 +1080,7 @@ static int fib_insert_alias(struct trie *t, struct key_vector *tp,
 	} else {
 		struct fib_alias *last;
 
-		hlist_for_each_entry (last, &l->leaf, fa_list) {
+		hlist_for_each_entry(last, &l->leaf, fa_list) {
 			if (new->fa_slen < last->fa_slen)
 				break;
 			if ((new->fa_slen == last->fa_slen) &&
@@ -1558,14 +1106,12 @@ static int fib_insert_alias(struct trie *t, struct key_vector *tp,
 
 static bool fib_valid_key_len(u32 key, u8 plen, struct netlink_ext_ack *extack)
 {
-	if (plen > 32) {
-		//fixed
+	if (plen > KEYLENGTH) {
 		NL_SET_ERR_MSG(extack, "Invalid prefix length");
 		return false;
 	}
 
-	if ((plen < 32) && (key << plen)) {
-		//fixed
+	if ((plen < KEYLENGTH) && (key << plen)) {
 		NL_SET_ERR_MSG(extack,
 			       "Invalid prefix for given prefix length");
 		return false;
@@ -1585,42 +1131,13 @@ int fib_table_insert(struct net *net, struct fib_table *tb,
 	u16 nlflags = NLM_F_EXCL;
 	struct fib_info *fi;
 	u8 plen = cfg->fc_dst_len;
-	u8 slen = 32 - plen; //fixed
+	u8 slen = KEYLENGTH - plen;
 	u8 tos = cfg->fc_tos;
 	u32 key;
 	int err;
-	t_key tkey; //fixed
-	int i;
-	
+
 	key = ntohl(cfg->fc_dst);
-	i = Key_form(key);
-	switch (i) {
-	case 0:
-		tkey = Key_map(key);
-		break;
-	case 1:
-		tkey = Key_compatible(key);
-		break;
-	case 2:
-		tkey = Key_embedded_32(key);
-		break;
-	case 3:
-		tkey = Key_embedded_40(key);
-		break;
-	case 4:
-		tkey = Key_embedded_48(key);
-		break;
-	case 5:
-		tkey = Key_embedded_56(key);
-		break;
-	case 6:
-		tkey = Key_embedded_64(key);
-		break;
-	default:
-		tkey = Key_compatible(key);
-		break;
-	}
-	
+
 	if (!fib_valid_key_len(key, plen, extack))
 		return -EINVAL;
 
@@ -1632,10 +1149,9 @@ int fib_table_insert(struct net *net, struct fib_table *tb,
 		goto err;
 	}
 
-	l = fib_find_node(t, &tp, tkey); //fixed
+	l = fib_find_node(t, &tp, key);
 	fa = l ? fib_find_alias(&l->leaf, slen, tos, fi->fib_priority,
-				tb->tb_id) :
-		 NULL;
+				tb->tb_id) : NULL;
 
 	/* Now fa, if non-NULL, points to the first fib alias
 	 * with the same keys [prefix,tos,priority], if such key already
@@ -1663,13 +1179,15 @@ int fib_table_insert(struct net *net, struct fib_table *tb,
 		 */
 		fa_match = NULL;
 		fa_first = fa;
-		hlist_for_each_entry_from (fa, fa_list) {
-			if ((fa->fa_slen != slen) || (fa->tb_id != tb->tb_id) ||
+		hlist_for_each_entry_from(fa, fa_list) {
+			if ((fa->fa_slen != slen) ||
+			    (fa->tb_id != tb->tb_id) ||
 			    (fa->fa_tos != tos))
 				break;
 			if (fa->fa_info->fib_priority != fi->fib_priority)
 				break;
-			if (fa->fa_type == cfg->fc_type && fa->fa_info == fi) {
+			if (fa->fa_type == cfg->fc_type &&
+			    fa->fa_info == fi) {
 				fa_match = fa;
 				break;
 			}
@@ -1758,7 +1276,7 @@ int fib_table_insert(struct net *net, struct fib_table *tb,
 		goto out_free_new_fa;
 
 	/* Insert new entry to the list. */
-	err = fib_insert_alias(t, tp, l, new_fa, fa, tkey); //fixed
+	err = fib_insert_alias(t, tp, l, new_fa, fa, key);
 	if (err)
 		goto out_fib_notif;
 
@@ -1777,45 +1295,36 @@ out_fib_notif:
 	 * fib_insert_alias is ENOMEM.
 	 */
 	NL_SET_ERR_MSG(extack, "Failed to insert route into trie");
-	call_fib_entry_notifiers(net, FIB_EVENT_ENTRY_DEL, key, plen, new_fa,
-				 NULL);
+	call_fib_entry_notifiers(net, FIB_EVENT_ENTRY_DEL, key,
+				 plen, new_fa, NULL);
 out_free_new_fa:
 	kmem_cache_free(fn_alias_kmem, new_fa);
 out:
 	fib_release_info(fi);
 err:
 	return err;
-	
 }
 
-static inline bool prefix_mismatch(t_key key, struct key_vector *n)
+static inline t_key prefix_mismatch(t_key key, struct key_vector *n)
 {
 	t_key prefix = n->key;
 
-	return Key_mismatch(key, prefix);
+	return (key ^ prefix) & (prefix | -prefix);
 }
 
 /* should be called with rcu_read_lock */
 int fib_table_lookup(struct fib_table *tb, const struct flowi4 *flp,
 		     struct fib_result *res, int fib_flags)
 {
-	struct trie *t = (struct trie *)tb->tb_data;
+	struct trie *t = (struct trie *) tb->tb_data;
 #ifdef CONFIG_IP_FIB_TRIE_STATS
 	struct trie_use_stats __percpu *stats = t->stats;
 #endif
-	const unsigned long key = ntohl(flp->daddr);
-	t_key tkey; //fixed
-
+	const t_key key = ntohl(flp->daddr);
 	struct key_vector *n, *pn;
 	struct fib_alias *fa;
 	unsigned long index;
-	unsigned long cindex;
-
-	if (Key_isPrivate(key)) {
-		tkey = Key_map(key);
-	} else {
-		tkey = Key_compatible(key);
-	}
+	t_key cindex;
 
 	pn = t->kv;
 	cindex = 0;
@@ -1832,7 +1341,7 @@ int fib_table_lookup(struct fib_table *tb, const struct flowi4 *flp,
 
 	/* Step 1: Travel to the longest prefix match in the trie */
 	for (;;) {
-		index = get_cindex(tkey, n);
+		index = get_cindex(key, n);
 
 		/* This bit of code is a bit tricky but it combines multiple
 		 * checks into a single check.  The prefix consists of the
@@ -1877,7 +1386,7 @@ int fib_table_lookup(struct fib_table *tb, const struct flowi4 *flp,
 		 * between the key and the prefix exist in the region of
 		 * the lsb and higher in the prefix.
 		 */
-		if (unlikely(prefix_mismatch(tkey, n)) || (n->slen == n->pos))
+		if (unlikely(prefix_mismatch(key, n)) || (n->slen == n->pos))
 			goto backtrace;
 
 		/* exit out and process leaf */
@@ -1890,7 +1399,7 @@ int fib_table_lookup(struct fib_table *tb, const struct flowi4 *flp,
 		 */
 
 		while ((n = rcu_dereference(*cptr)) == NULL) {
-		backtrace:
+backtrace:
 #ifdef CONFIG_IP_FIB_TRIE_STATS
 			if (!n)
 				this_cpu_inc(stats->null_node_hit);
@@ -1930,14 +1439,14 @@ int fib_table_lookup(struct fib_table *tb, const struct flowi4 *flp,
 
 found:
 	/* this line carries forward the xor from earlier in the function */
-	index = Key_toint(Key_xor(tkey, n->key)); //fixed
+	index = key ^ n->key;
 
 	/* Step 3: Process the leaf, if that fails fall back to backtracing */
-	hlist_for_each_entry_rcu (fa, &n->leaf, fa_list) {
+	hlist_for_each_entry_rcu(fa, &n->leaf, fa_list) {
 		struct fib_info *fi = fa->fa_info;
 		int nhsel, err;
 
-		if ((BITS_PER_LONG > KEYLENGTH) || (fa->fa_slen < 32)) {
+		if ((BITS_PER_LONG > KEYLENGTH) || (fa->fa_slen < KEYLENGTH)) {
 			if (index >= (1ul << fa->fa_slen))
 				continue;
 		}
@@ -1978,8 +1487,8 @@ found:
 			if (!(fib_flags & FIB_LOOKUP_NOREF))
 				refcount_inc(&fi->fib_clntref);
 
-			res->prefix = htonl(Key_toint(n->key)); //fixed
-			res->prefixlen = 32 - fa->fa_slen; //fixed
+			res->prefix = htonl(n->key);
+			res->prefixlen = KEYLENGTH - fa->fa_slen;
 			res->nh_sel = nhsel;
 			res->type = fa->fa_type;
 			res->scope = fi->fib_scope;
@@ -2036,27 +1545,20 @@ static void fib_remove_alias(struct trie *t, struct key_vector *tp,
 int fib_table_delete(struct net *net, struct fib_table *tb,
 		     struct fib_config *cfg, struct netlink_ext_ack *extack)
 {
-	struct trie *t = (struct trie *)tb->tb_data;
+	struct trie *t = (struct trie *) tb->tb_data;
 	struct fib_alias *fa, *fa_to_delete;
 	struct key_vector *l, *tp;
 	u8 plen = cfg->fc_dst_len;
-	u8 slen = 32 - plen; //fixed
+	u8 slen = KEYLENGTH - plen;
 	u8 tos = cfg->fc_tos;
 	u32 key;
-	t_key tkey;
 
 	key = ntohl(cfg->fc_dst);
-
-	if (Key_isPrivate(key)) {
-		tkey = Key_map(key);
-	} else {
-		tkey = Key_compatible(key);
-	}
 
 	if (!fib_valid_key_len(key, plen, extack))
 		return -EINVAL;
 
-	l = fib_find_node(t, &tp, tkey); //fixed
+	l = fib_find_node(t, &tp, key);
 	if (!l)
 		return -ESRCH;
 
@@ -2067,17 +1569,19 @@ int fib_table_delete(struct net *net, struct fib_table *tb,
 	pr_debug("Deleting %08x/%d tos=%d t=%p\n", key, plen, tos, t);
 
 	fa_to_delete = NULL;
-	hlist_for_each_entry_from (fa, fa_list) {
+	hlist_for_each_entry_from(fa, fa_list) {
 		struct fib_info *fi = fa->fa_info;
 
-		if ((fa->fa_slen != slen) || (fa->tb_id != tb->tb_id) ||
+		if ((fa->fa_slen != slen) ||
+		    (fa->tb_id != tb->tb_id) ||
 		    (fa->fa_tos != tos))
 			break;
 
 		if ((!cfg->fc_type || fa->fa_type == cfg->fc_type) &&
 		    (cfg->fc_scope == RT_SCOPE_NOWHERE ||
 		     fa->fa_info->fib_scope == cfg->fc_scope) &&
-		    (!cfg->fc_prefsrc || fi->fib_prefsrc == cfg->fc_prefsrc) &&
+		    (!cfg->fc_prefsrc ||
+		     fi->fib_prefsrc == cfg->fc_prefsrc) &&
 		    (!cfg->fc_protocol ||
 		     fi->fib_protocol == cfg->fc_protocol) &&
 		    fib_nh_match(cfg, fi, extack) == 0 &&
@@ -2118,7 +1622,7 @@ static struct key_vector *leaf_walk_rcu(struct key_vector **tn, t_key key)
 	do {
 		/* record parent and next child index */
 		pn = n;
-		cindex = Key_greater(key, pn->key) ? get_index(key, pn) : 0;
+		cindex = (key > pn->key) ? get_index(key, pn) : 0;
 
 		if (cindex >> pn->bits)
 			break;
@@ -2129,7 +1633,7 @@ static struct key_vector *leaf_walk_rcu(struct key_vector **tn, t_key key)
 			break;
 
 		/* guarantee forward progress on the keys */
-		if (IS_LEAF(n) && !Key_greater(key, n->key))
+		if (IS_LEAF(n) && (n->key >= key))
 			goto found;
 	} while (IS_TNODE(n));
 
@@ -2209,7 +1713,7 @@ static void fib_trie_free(struct fib_table *tb)
 			continue;
 		}
 
-		hlist_for_each_entry_safe (fa, tmp, &n->leaf, fa_list) {
+		hlist_for_each_entry_safe(fa, tmp, &n->leaf, fa_list) {
 			hlist_del_rcu(&fa->fa_list);
 			alias_free_mem_rcu(fa);
 		}
@@ -2231,7 +1735,7 @@ struct fib_table *fib_trie_unmerge(struct fib_table *oldtb)
 	struct fib_table *local_tb;
 	struct fib_alias *fa;
 	struct trie *lt;
-	t_key key = Key_zero(); //fixed
+	t_key key = 0;
 
 	if (oldtb->tb_data == oldtb->__data)
 		return oldtb;
@@ -2245,7 +1749,7 @@ struct fib_table *fib_trie_unmerge(struct fib_table *oldtb)
 	while ((l = leaf_walk_rcu(&tp, key)) != NULL) {
 		struct key_vector *local_l = NULL, *local_tp;
 
-		hlist_for_each_entry_rcu (fa, &l->leaf, fa_list) {
+		hlist_for_each_entry_rcu(fa, &l->leaf, fa_list) {
 			struct fib_alias *new_fa;
 
 			if (local_tb->tb_id != fa->tb_id)
@@ -2270,11 +1774,9 @@ struct fib_table *fib_trie_unmerge(struct fib_table *oldtb)
 		}
 
 		/* stop loop if key wrapped back to 0 */
-		//key = l->key + 1;
-		//if (key < l->key)
-		//	break;
-
-		key = Key_addone(l->key);
+		key = l->key + 1;
+		if (key < l->key)
+			break;
 	}
 
 	return local_tb;
@@ -2329,10 +1831,10 @@ void fib_table_flush_external(struct fib_table *tb)
 			continue;
 		}
 
-		hlist_for_each_entry_safe (fa, tmp, &n->leaf, fa_list) {
+		hlist_for_each_entry_safe(fa, tmp, &n->leaf, fa_list) {
 			/* if alias was cloned to local then we just
-	 * need to remove the local copy from main
-	 */
+			 * need to remove the local copy from main
+			 */
 			if (tb->tb_id != fa->tb_id) {
 				hlist_del_rcu(&fa->fa_list);
 				alias_free_mem_rcu(fa);
@@ -2399,7 +1901,7 @@ int fib_table_flush(struct net *net, struct fib_table *tb, bool flush_all)
 			continue;
 		}
 
-		hlist_for_each_entry_safe (fa, tmp, &n->leaf, fa_list) {
+		hlist_for_each_entry_safe(fa, tmp, &n->leaf, fa_list) {
 			struct fib_info *fi = fa->fa_info;
 
 			if (!fi || tb->tb_id != fa->tb_id ||
@@ -2410,16 +1912,17 @@ int fib_table_flush(struct net *net, struct fib_table *tb, bool flush_all)
 			}
 
 			/* Do not flush error routes if network namespace is
- * not being dismantled
- */
+			 * not being dismantled
+			 */
 			if (!flush_all && fib_props[fa->fa_type].error) {
 				slen = fa->fa_slen;
 				continue;
 			}
 
 			call_fib_entry_notifiers(net, FIB_EVENT_ENTRY_DEL,
-						 Key_toint(n->key),
-						 32 - fa->fa_slen, fa, NULL);
+						 n->key,
+						 KEYLENGTH - fa->fa_slen, fa,
+						 NULL);
 			hlist_del_rcu(&fa->fa_list);
 			fib_release_info(fa->fa_info);
 			alias_free_mem_rcu(fa);
@@ -2444,21 +1947,20 @@ static void fib_leaf_notify(struct net *net, struct key_vector *l,
 {
 	struct fib_alias *fa;
 
-	hlist_for_each_entry_rcu (fa, &l->leaf, fa_list) {
+	hlist_for_each_entry_rcu(fa, &l->leaf, fa_list) {
 		struct fib_info *fi = fa->fa_info;
 
 		if (!fi)
 			continue;
 
 		/* local and main table can share the same trie,
- * so don't notify twice for the same entry.
- */
+		 * so don't notify twice for the same entry.
+		 */
 		if (tb->tb_id != fa->tb_id)
 			continue;
 
-		call_fib_entry_notifier(nb, net, FIB_EVENT_ENTRY_ADD,
-					Key_toint(l->key), 32 - fa->fa_slen,
-					fa);
+		call_fib_entry_notifier(nb, net, FIB_EVENT_ENTRY_ADD, l->key,
+					KEYLENGTH - fa->fa_slen, fa);
 	}
 }
 
@@ -2467,15 +1969,15 @@ static void fib_table_notify(struct net *net, struct fib_table *tb,
 {
 	struct trie *t = (struct trie *)tb->tb_data;
 	struct key_vector *l, *tp = t->kv;
-	t_key key = Key_zero();
+	t_key key = 0;
 
 	while ((l = leaf_walk_rcu(&tp, key)) != NULL) {
 		fib_leaf_notify(net, l, tb, nb);
 
-		key = Key_addone(l->key);
+		key = l->key + 1;
 		/* stop in case of wrap around */
-		//if (key < l->key)
-		//	break;
+		if (key < l->key)
+			break;
 	}
 }
 
@@ -2487,7 +1989,7 @@ void fib_notify(struct net *net, struct notifier_block *nb)
 		struct hlist_head *head = &net->ipv4.fib_table_hash[h];
 		struct fib_table *tb;
 
-		hlist_for_each_entry_rcu (tb, head, tb_hlist)
+		hlist_for_each_entry_rcu(tb, head, tb_hlist)
 			fib_table_notify(net, tb, nb);
 	}
 }
@@ -2514,7 +2016,7 @@ static int fn_trie_dump_leaf(struct key_vector *l, struct fib_table *tb,
 			     struct fib_dump_filter *filter)
 {
 	unsigned int flags = NLM_F_MULTI;
-	__be32 xkey = htonl(Key_toint(l->key)); //fixed
+	__be32 xkey = htonl(l->key);
 	struct fib_alias *fa;
 	int i, s_i;
 
@@ -2525,7 +2027,7 @@ static int fn_trie_dump_leaf(struct key_vector *l, struct fib_table *tb,
 	i = 0;
 
 	/* rcu_read_lock is hold by caller */
-	hlist_for_each_entry_rcu (fa, &l->leaf, fa_list) {
+	hlist_for_each_entry_rcu(fa, &l->leaf, fa_list) {
 		int err;
 
 		if (i < s_i)
@@ -2548,14 +2050,15 @@ static int fn_trie_dump_leaf(struct key_vector *l, struct fib_table *tb,
 		}
 
 		err = fib_dump_info(skb, NETLINK_CB(cb->skb).portid,
-				    cb->nlh->nlmsg_seq, RTM_NEWROUTE, tb->tb_id,
-				    fa->fa_type, xkey, 32 - fa->fa_slen,
+				    cb->nlh->nlmsg_seq, RTM_NEWROUTE,
+				    tb->tb_id, fa->fa_type,
+				    xkey, KEYLENGTH - fa->fa_slen,
 				    fa->fa_tos, fa->fa_info, flags);
 		if (err < 0) {
 			cb->args[4] = i;
 			return err;
 		}
-	next:
+next:
 		i++;
 	}
 
@@ -2573,17 +2076,9 @@ int fib_table_dump(struct fib_table *tb, struct sk_buff *skb,
 	 * Note: 0.0.0.0/0 (ie default) is first key.
 	 */
 	int count = cb->args[2];
-	unsigned long key = cb->args[3];
+	t_key key = cb->args[3];
 
-	/*fixed*/
-	t_key tkey;
-	if (Key_isPrivate(key)) {
-		tkey = Key_map(key);
-	} else {
-		tkey = Key_compatible(key);
-	}
-
-	while ((l = leaf_walk_rcu(&tp, tkey)) != NULL) {
+	while ((l = leaf_walk_rcu(&tp, key)) != NULL) {
 		int err;
 
 		err = fn_trie_dump_leaf(l, tb, skb, cb, filter);
@@ -2594,14 +2089,14 @@ int fib_table_dump(struct fib_table *tb, struct sk_buff *skb,
 		}
 
 		++count;
-		tkey = Key_addone(l->key);
+		key = l->key + 1;
 
 		memset(&cb->args[4], 0,
-		       sizeof(cb->args) - 4 * sizeof(cb->args[0]));
+		       sizeof(cb->args) - 4*sizeof(cb->args[0]));
 
 		/* stop loop if key wrapped back to 0 */
-		//if (key < l->key)
-		//	break;
+		if (key < l->key)
+			break;
 	}
 
 	cb->args[3] = key;
@@ -2612,11 +2107,13 @@ int fib_table_dump(struct fib_table *tb, struct sk_buff *skb,
 
 void __init fib_trie_init(void)
 {
-	fn_alias_kmem = kmem_cache_create(
-		"ip_fib_alias", sizeof(struct fib_alias), 0, SLAB_PANIC, NULL);
+	fn_alias_kmem = kmem_cache_create("ip_fib_alias",
+					  sizeof(struct fib_alias),
+					  0, SLAB_PANIC, NULL);
 
-	trie_leaf_kmem = kmem_cache_create("ip_fib_trie", LEAF_SIZE, 0,
-					   SLAB_PANIC, NULL);
+	trie_leaf_kmem = kmem_cache_create("ip_fib_trie",
+					   LEAF_SIZE,
+					   0, SLAB_PANIC, NULL);
 }
 
 struct fib_table *fib_trie_table(u32 id, struct fib_table *alias)
@@ -2639,7 +2136,7 @@ struct fib_table *fib_trie_table(u32 id, struct fib_table *alias)
 	if (alias)
 		return tb;
 
-	t = (struct trie *)tb->tb_data;
+	t = (struct trie *) tb->tb_data;
 	t->kv[0].pos = KEYLENGTH;
 	t->kv[0].slen = KEYLENGTH;
 #ifdef CONFIG_IP_FIB_TRIE_STATS
@@ -2669,8 +2166,8 @@ static struct key_vector *fib_trie_get_next(struct fib_trie_iter *iter)
 	struct key_vector *pn = iter->tnode;
 	t_key pkey;
 
-	pr_debug("get_next iter={node=%p index=%d depth=%d}\n", iter->tnode,
-		 iter->index, iter->depth);
+	pr_debug("get_next iter={node=%p index=%d depth=%d}\n",
+		 iter->tnode, iter->index, iter->depth);
 
 	while (!IS_TRIE(pn)) {
 		while (cindex < child_length(pn)) {
@@ -2740,8 +2237,7 @@ static void trie_collect_stats(struct trie *t, struct trie_stat *s)
 	memset(s, 0, sizeof(*s));
 
 	rcu_read_lock();
-	for (n = fib_trie_get_first(&iter, t); n;
-	     n = fib_trie_get_next(&iter)) {
+	for (n = fib_trie_get_first(&iter, t); n; n = fib_trie_get_next(&iter)) {
 		if (IS_LEAF(n)) {
 			struct fib_alias *fa;
 
@@ -2750,7 +2246,7 @@ static void trie_collect_stats(struct trie *t, struct trie_stat *s)
 			if (iter.depth > s->maxdepth)
 				s->maxdepth = iter.depth;
 
-			hlist_for_each_entry_rcu (fa, &n->leaf, fa_list)
+			hlist_for_each_entry_rcu(fa, &n->leaf, fa_list)
 				++s->prefixes;
 		} else {
 			s->tnodes++;
@@ -2770,12 +2266,12 @@ static void trie_show_stats(struct seq_file *seq, struct trie_stat *stat)
 	unsigned int i, max, pointers, bytes, avdepth;
 
 	if (stat->leaves)
-		avdepth = stat->totdepth * 100 / stat->leaves;
+		avdepth = stat->totdepth*100 / stat->leaves;
 	else
 		avdepth = 0;
 
-	seq_printf(seq, "\tAver depth:     %u.%02d\n", avdepth / 100,
-		   avdepth % 100);
+	seq_printf(seq, "\tAver depth:     %u.%02d\n",
+		   avdepth / 100, avdepth % 100);
 	seq_printf(seq, "\tMax depth:      %u\n", stat->maxdepth);
 
 	seq_printf(seq, "\tLeaves:         %u\n", stat->leaves);
@@ -2788,14 +2284,14 @@ static void trie_show_stats(struct seq_file *seq, struct trie_stat *stat)
 	bytes += TNODE_SIZE(0) * stat->tnodes;
 
 	max = MAX_STAT_DEPTH;
-	while (max > 0 && stat->nodesizes[max - 1] == 0)
+	while (max > 0 && stat->nodesizes[max-1] == 0)
 		max--;
 
 	pointers = 0;
 	for (i = 1; i < max; i++)
 		if (stat->nodesizes[i] != 0) {
-			seq_printf(seq, "  %u: %u", i, stat->nodesizes[i]);
-			pointers += (1 << i) * stat->nodesizes[i];
+			seq_printf(seq, "  %u: %u",  i, stat->nodesizes[i]);
+			pointers += (1<<i) * stat->nodesizes[i];
 		}
 	seq_putc(seq, '\n');
 	seq_printf(seq, "\tPointers: %u\n", pointers);
@@ -2813,7 +2309,7 @@ static void trie_show_usage(struct seq_file *seq,
 	int cpu;
 
 	/* loop through all of the CPUs and gather up the stats */
-	for_each_possible_cpu (cpu) {
+	for_each_possible_cpu(cpu) {
 		const struct trie_use_stats *pcpu = per_cpu_ptr(stats, cpu);
 
 		s.gets += pcpu->gets;
@@ -2845,6 +2341,7 @@ static void fib_table_print(struct seq_file *seq, struct fib_table *tb)
 		seq_printf(seq, "Id %d:\n", tb->tb_id);
 }
 
+
 static int fib_triestat_seq_show(struct seq_file *seq, void *v)
 {
 	struct net *net = (struct net *)seq->private;
@@ -2859,8 +2356,8 @@ static int fib_triestat_seq_show(struct seq_file *seq, void *v)
 		struct hlist_head *head = &net->ipv4.fib_table_hash[h];
 		struct fib_table *tb;
 
-		hlist_for_each_entry_rcu (tb, head, tb_hlist) {
-			struct trie *t = (struct trie *)tb->tb_data;
+		hlist_for_each_entry_rcu(tb, head, tb_hlist) {
+			struct trie *t = (struct trie *) tb->tb_data;
 			struct trie_stat stat;
 
 			if (!t)
@@ -2890,11 +2387,11 @@ static struct key_vector *fib_trie_get_idx(struct seq_file *seq, loff_t pos)
 		struct hlist_head *head = &net->ipv4.fib_table_hash[h];
 		struct fib_table *tb;
 
-		hlist_for_each_entry_rcu (tb, head, tb_hlist) {
+		hlist_for_each_entry_rcu(tb, head, tb_hlist) {
 			struct key_vector *n;
 
 			for (n = fib_trie_get_first(iter,
-						    (struct trie *)tb->tb_data);
+						    (struct trie *) tb->tb_data);
 			     n; n = fib_trie_get_next(iter))
 				if (pos == idx++) {
 					iter->tb = tb;
@@ -2932,7 +2429,7 @@ static void *fib_trie_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 	h = tb->tb_id & (FIB_TABLE_HASHSZ - 1);
 	while ((tb_node = rcu_dereference(hlist_next_rcu(&tb->tb_hlist)))) {
 		tb = hlist_entry(tb_node, struct fib_table, tb_hlist);
-		n = fib_trie_get_first(iter, (struct trie *)tb->tb_data);
+		n = fib_trie_get_first(iter, (struct trie *) tb->tb_data);
 		if (n)
 			goto found;
 	}
@@ -2940,9 +2437,8 @@ static void *fib_trie_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 	/* new hash chain */
 	while (++h < FIB_TABLE_HASHSZ) {
 		struct hlist_head *head = &net->ipv4.fib_table_hash[h];
-		hlist_for_each_entry_rcu (tb, head, tb_hlist) {
-			n = fib_trie_get_first(iter,
-					       (struct trie *)tb->tb_data);
+		hlist_for_each_entry_rcu(tb, head, tb_hlist) {
+			n = fib_trie_get_first(iter, (struct trie *) tb->tb_data);
 			if (n)
 				goto found;
 		}
@@ -2954,7 +2450,8 @@ found:
 	return n;
 }
 
-static void fib_trie_seq_stop(struct seq_file *seq, void *v) __releases(RCU)
+static void fib_trie_seq_stop(struct seq_file *seq, void *v)
+	__releases(RCU)
 {
 	rcu_read_unlock();
 }
@@ -2968,16 +2465,11 @@ static void seq_indent(struct seq_file *seq, int n)
 static inline const char *rtn_scope(char *buf, size_t len, enum rt_scope_t s)
 {
 	switch (s) {
-	case RT_SCOPE_UNIVERSE:
-		return "universe";
-	case RT_SCOPE_SITE:
-		return "site";
-	case RT_SCOPE_LINK:
-		return "link";
-	case RT_SCOPE_HOST:
-		return "host";
-	case RT_SCOPE_NOWHERE:
-		return "nowhere";
+	case RT_SCOPE_UNIVERSE: return "universe";
+	case RT_SCOPE_SITE:	return "site";
+	case RT_SCOPE_LINK:	return "link";
+	case RT_SCOPE_HOST:	return "host";
+	case RT_SCOPE_NOWHERE:	return "nowhere";
 	default:
 		snprintf(buf, len, "scope=%d", s);
 		return buf;
@@ -2999,17 +2491,11 @@ static const char *const rtn_type_names[__RTN_MAX] = {
 	[RTN_XRESOLVE] = "XRESOLVE",
 };
 
-static inline const char *rtn_type(char *buf, size_t len, u32 key)
+static inline const char *rtn_type(char *buf, size_t len, unsigned int t)
 {
-	/*
-	    if (t < __RTN_MAX && rtn_type_names[t])
-	    	return rtn_type_names[t];
-	*/
-	if (Key_isPrivate(key))
-		return "mapped";
-	else
-		return "compatible";
-	snprintf(buf, len, "type %u", key);
+	if (t < __RTN_MAX && rtn_type_names[t])
+		return rtn_type_names[t];
+	snprintf(buf, len, "type %u", t);
 	return buf;
 }
 
@@ -3018,53 +2504,35 @@ static int fib_trie_seq_show(struct seq_file *seq, void *v)
 {
 	const struct fib_trie_iter *iter = seq->private;
 	struct key_vector *n = v;
-	int i = 0;
 
 	if (IS_TRIE(node_parent_rcu(n)))
 		fib_table_print(seq, iter->tb);
 
 	if (IS_TNODE(n)) {
-		__be32 prf = htonl(Key_toint(n->key));
+		__be32 prf = htonl(n->key);
 
-		seq_indent(seq, iter->depth - 1);
-		seq_printf(seq, "  +-- ");
-		for (i = 0; i < 12; ++i) {
-			seq_printf(seq, "%02x", n->key.s6_addr[i]);
-			if (i % 2 == 1)
-				seq_printf(seq, ":");
-		}
-		seq_printf(seq, "%pI4/%zu %u %u %u\n", &prf,
-			   KEYLENGTH - n->pos - n->bits, n->bits,
+		seq_indent(seq, iter->depth-1);
+		seq_printf(seq, "  +-- %pI4/%zu %u %u %u\n",
+			   &prf, KEYLENGTH - n->pos - n->bits, n->bits,
 			   tn_info(n)->full_children,
 			   tn_info(n)->empty_children);
-		/*
-			seq_printf(seq, "  +-- %pI4/%zu %u %u %u\n",
-				   &prf, KEYLENGTH - n->pos - n->bits, n->bits,
-				   tn_info(n)->full_children,
-				   tn_info(n)->empty_children);
-		       */
 	} else {
-		__be32 val = htonl(Key_toint(n->key));
+		__be32 val = htonl(n->key);
 		struct fib_alias *fa;
 
 		seq_indent(seq, iter->depth);
-		//seq_printf(seq, "  |-- %pI4\n", &val);
-		seq_printf(seq, "  |-- ");
-		for (i = 0; i < 12; ++i) {
-			seq_printf(seq, "%02x", n->key.s6_addr[i]);
-			if (i % 2 == 1)
-				seq_printf(seq, ":");
-		}
-		seq_printf(seq, "%pI4\n", &val);
+		seq_printf(seq, "  |-- %pI4\n", &val);
 
-		hlist_for_each_entry_rcu (fa, &n->leaf, fa_list) {
+		hlist_for_each_entry_rcu(fa, &n->leaf, fa_list) {
 			char buf1[32], buf2[32];
 
 			seq_indent(seq, iter->depth + 1);
-			seq_printf(seq, "  /%zu %s %s", KEYLENGTH - fa->fa_slen,
+			seq_printf(seq, "  /%zu %s %s",
+				   KEYLENGTH - fa->fa_slen,
 				   rtn_scope(buf1, sizeof(buf1),
 					     fa->fa_info->fib_scope),
-				   Key_type(n->key));
+				   rtn_type(buf2, sizeof(buf2),
+					    fa->fa_type));
 			if (fa->fa_tos)
 				seq_printf(seq, " tos=%d", fa->fa_tos);
 			seq_putc(seq, '\n');
@@ -3075,18 +2543,18 @@ static int fib_trie_seq_show(struct seq_file *seq, void *v)
 }
 
 static const struct seq_operations fib_trie_seq_ops = {
-	.start = fib_trie_seq_start,
-	.next = fib_trie_seq_next,
-	.stop = fib_trie_seq_stop,
-	.show = fib_trie_seq_show,
+	.start  = fib_trie_seq_start,
+	.next   = fib_trie_seq_next,
+	.stop   = fib_trie_seq_stop,
+	.show   = fib_trie_seq_show,
 };
 
 struct fib_route_iter {
 	struct seq_net_private p;
 	struct fib_table *main_tb;
 	struct key_vector *tnode;
-	loff_t pos;
-	t_key key;
+	loff_t	pos;
+	t_key	key;
 };
 
 static struct key_vector *fib_route_get_idx(struct fib_route_iter *iter,
@@ -3100,24 +2568,25 @@ static struct key_vector *fib_route_get_idx(struct fib_route_iter *iter,
 		key = iter->key;
 	} else {
 		iter->pos = 1;
-		key = Key_zero();
+		key = 0;
 	}
 
 	pos -= iter->pos;
 
 	while ((l = leaf_walk_rcu(tp, key)) && (pos-- > 0)) {
-		key = Key_addone(l->key);
+		key = l->key + 1;
 		iter->pos++;
 		l = NULL;
 
 		/* handle unlikely case of a key wrap */
-		//if (!key)break;
+		if (!key)
+			break;
 	}
 
 	if (l)
-		iter->key = l->key; /* remember it */
+		iter->key = l->key;	/* remember it */
 	else
-		iter->pos = 0; /* forget it */
+		iter->pos = 0;		/* forget it */
 
 	return l;
 }
@@ -3143,7 +2612,7 @@ static void *fib_route_seq_start(struct seq_file *seq, loff_t *pos)
 		return fib_route_get_idx(iter, *pos);
 
 	iter->pos = 0;
-	iter->key = Key_max();
+	iter->key = KEY_MAX;
 
 	return SEQ_START_TOKEN;
 }
@@ -3152,12 +2621,12 @@ static void *fib_route_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 {
 	struct fib_route_iter *iter = seq->private;
 	struct key_vector *l = NULL;
-	t_key key = Key_addone(iter->key);
+	t_key key = iter->key + 1;
 
 	++*pos;
 
 	/* only allow key of 0 for start of sequence */
-	if ((v == SEQ_START_TOKEN) || Key_nzero(key))
+	if ((v == SEQ_START_TOKEN) || key)
 		l = leaf_walk_rcu(&iter->tnode, key);
 
 	if (l) {
@@ -3170,13 +2639,13 @@ static void *fib_route_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 	return l;
 }
 
-static void fib_route_seq_stop(struct seq_file *seq, void *v) __releases(RCU)
+static void fib_route_seq_stop(struct seq_file *seq, void *v)
+	__releases(RCU)
 {
 	rcu_read_unlock();
 }
 
-static unsigned int fib_flag_trans(int type, __be32 mask,
-				   const struct fib_info *fi)
+static unsigned int fib_flag_trans(int type, __be32 mask, const struct fib_info *fi)
 {
 	unsigned int flags = 0;
 
@@ -3205,16 +2674,15 @@ static int fib_route_seq_show(struct seq_file *seq, void *v)
 	__be32 prefix;
 
 	if (v == SEQ_START_TOKEN) {
-		seq_printf(seq, "%-127s\n",
-			   "Iface\tDestination\tGateway "
+		seq_printf(seq, "%-127s\n", "Iface\tDestination\tGateway "
 			   "\tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU"
 			   "\tWindow\tIRTT");
 		return 0;
 	}
 
-	prefix = htonl(Key_toint(l->key));
+	prefix = htonl(l->key);
 
-	hlist_for_each_entry_rcu (fa, &l->leaf, fa_list) {
+	hlist_for_each_entry_rcu(fa, &l->leaf, fa_list) {
 		const struct fib_info *fi = fa->fa_info;
 		__be32 mask = inet_make_mask(KEYLENGTH - fa->fa_slen);
 		unsigned int flags = fib_flag_trans(fa->fa_type, mask, fi);
@@ -3233,15 +2701,20 @@ static int fib_route_seq_show(struct seq_file *seq, void *v)
 				   "%s\t%08X\t%08X\t%04X\t%d\t%u\t"
 				   "%d\t%08X\t%d\t%u\t%u",
 				   fi->fib_dev ? fi->fib_dev->name : "*",
-				   prefix, fi->fib_nh->nh_gw, flags, 0, 0,
-				   fi->fib_priority, mask,
-				   (fi->fib_advmss ? fi->fib_advmss + 40 : 0),
-				   fi->fib_window, fi->fib_rtt >> 3);
+				   prefix,
+				   fi->fib_nh->nh_gw, flags, 0, 0,
+				   fi->fib_priority,
+				   mask,
+				   (fi->fib_advmss ?
+				    fi->fib_advmss + 40 : 0),
+				   fi->fib_window,
+				   fi->fib_rtt >> 3);
 		else
 			seq_printf(seq,
 				   "*\t%08X\t%08X\t%04X\t%d\t%u\t"
 				   "%d\t%08X\t%d\t%u\t%u",
-				   prefix, 0, flags, 0, 0, 0, mask, 0, 0, 0);
+				   prefix, 0, flags, 0, 0, 0,
+				   mask, 0, 0, 0);
 
 		seq_pad(seq, '\n');
 	}
@@ -3250,24 +2723,24 @@ static int fib_route_seq_show(struct seq_file *seq, void *v)
 }
 
 static const struct seq_operations fib_route_seq_ops = {
-	.start = fib_route_seq_start,
-	.next = fib_route_seq_next,
-	.stop = fib_route_seq_stop,
-	.show = fib_route_seq_show,
+	.start  = fib_route_seq_start,
+	.next   = fib_route_seq_next,
+	.stop   = fib_route_seq_stop,
+	.show   = fib_route_seq_show,
 };
 
 int __net_init fib_proc_init(struct net *net)
 {
 	if (!proc_create_net("fib_trie", 0444, net->proc_net, &fib_trie_seq_ops,
-			     sizeof(struct fib_trie_iter)))
+			sizeof(struct fib_trie_iter)))
 		goto out1;
 
 	if (!proc_create_net_single("fib_triestat", 0444, net->proc_net,
-				    fib_triestat_seq_show, NULL))
+			fib_triestat_seq_show, NULL))
 		goto out2;
 
 	if (!proc_create_net("route", 0444, net->proc_net, &fib_route_seq_ops,
-			     sizeof(struct fib_route_iter)))
+			sizeof(struct fib_route_iter)))
 		goto out3;
 
 	return 0;
