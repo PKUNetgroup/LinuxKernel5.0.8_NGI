@@ -756,7 +756,7 @@ config TCP_MD5SIG
 	  If unsure, say N.
 
 config IP_SWEN
-	bool "IP: variable length addressing extension"
+	bool "IP: variable length addressing extension to IPv4"
 	default n
 	---help---
 	  If unsure, say N.
