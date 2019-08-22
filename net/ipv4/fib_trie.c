@@ -150,49 +150,34 @@ typedef unsigned int t_key;
 #define FIAR_EMBEDDED_64 0xa7
 #define FIAR_EMBEDDED_96 0xa9
 
-t_key Key_max(void)
-{
-	t_key max;
-	int i;
-	for (i = 0; i < 16; i++) {
-		max.s6_addr[i] = 0xff;
-	}
-	return max;
-}
-
-t_key Key_zero(void)
-{
-	t_key zero;
-	int i;
-	for (i = 0; i < 16; i++) {
-		zero.s6_addr[i] = 0;
-	}
-	return zero;
-}
-t_key Key_xor(t_key *a, t_key *b)
+static t_key key_xor(t_key *a, t_key *b)
 {
 	t_key result;
-	int i;
+	/*int i;
 	for (i = 0; i < 16; i++) {
 		result.s6_addr[i] = a->s6_addr[i] ^ b->s6_addr[i];
-	}
+	}*/
+	*(u64*)(result.s6_addr) = *(u64*)(a->s6_addr) ^ *(u64*)(b->s6_addr);
+	*(u64*)(result.s6_addr + 8) = *(u64*)(a->s6_addr + 8) ^ *(u64*)(b->s6_addr + 8);
 	return result;
 }
 
-t_key Key_or(t_key *a, t_key *b)
+static t_key key_or(t_key *a, t_key *b)
 {
 	t_key result;
-	int i;
+	/*int i;
 	for (i = 0; i < 16; i++) {
 		result.s6_addr[i] = a->s6_addr[i] | b->s6_addr[i];
-	}
+	}*/
+	*(u64*)(result.s6_addr) = *(u64*)(a->s6_addr) | *(u64*)(b->s6_addr);
+	*(u64*)(result.s6_addr + 8) = *(u64*)(a->s6_addr + 8) | *(u64*)(b->s6_addr + 8); 
 	return result;
 }
 
-t_key Key_shift_right(t_key *key, unsigned char p)
+static t_key key_shift_right(t_key *key, unsigned char p)
 {
 	int i;
-	t_key result = Key_zero();
+	t_key result = { 0 };
 	int shift = p / 8;
 	int nr = p % 8;
 	int nl = 8 - nr;
@@ -207,10 +192,10 @@ t_key Key_shift_right(t_key *key, unsigned char p)
 	return result;
 }
 
-t_key Key_shift_left(t_key *key, unsigned char p)
+static t_key key_shift_left(t_key *key, unsigned char p)
 {
 	int i;
-	t_key result = Key_zero();
+	t_key result = { 0 };
 	int shift = p / 8;
 	int nl = p % 8;
 	int nr = 8 - nl;
@@ -225,7 +210,7 @@ t_key Key_shift_left(t_key *key, unsigned char p)
 	return result;
 }
 
-unsigned long Key_toint(t_key *key)
+static unsigned long key_toint(t_key *key)
 {
 	int i;
 	unsigned long result = 0;
@@ -235,10 +220,10 @@ unsigned long Key_toint(t_key *key)
 	return result;
 }
 
-t_key Key_fromint(unsigned long n)
+static t_key key_fromint(unsigned long n)
 {
 	int i;
-	t_key result = Key_zero();
+	t_key result = { 0 };
 	for (i = 0; i < 4; i++) {
 		result.s6_addr[15 - i] = n % 256;
 		n /= 256;
@@ -246,10 +231,10 @@ t_key Key_fromint(unsigned long n)
 	return result;
 }
 
-t_key Key_map(u32 key)
+static t_key key_map(u32 key)
 {
 	int i;
-	t_key result = Key_zero();
+	t_key result = { 0 };
 	for (i = 0; i < 4; i++) {
 		result.s6_addr[15 - i] = key % 256;
 		key /= 256;
@@ -262,10 +247,10 @@ t_key Key_map(u32 key)
 	return result;
 }
 
-t_key Key_compatible(u32 key)
+static t_key key_compatible(u32 key)
 {
 	int i;
-	t_key result = Key_zero();
+	t_key result = { 0 };
 	for (i = 0; i < 4; i++) {
 		result.s6_addr[15 - i] = key % 256;
 		key /= 256;
@@ -275,10 +260,10 @@ t_key Key_compatible(u32 key)
 	return result;
 }
 
-t_key Key_embedded_32(u32 key)
+static t_key key_embedded_32(u32 key)
 {
-	t_key result = Key_zero();
-	
+	t_key result = { 0 };
+
 	result.s6_addr[7] = key % 256;
 	key /= 256;
 	result.s6_addr[6] = key % 256;
@@ -292,9 +277,9 @@ t_key Key_embedded_32(u32 key)
 	return result;
 }
 
-t_key Key_embedded_40(u32 key)
+static t_key key_embedded_40(u32 key)
 {
-	t_key result = Key_zero();
+	t_key result = { 0 };
 
 	result.s6_addr[9] = key % 256;
 	key /= 256;
@@ -309,9 +294,9 @@ t_key Key_embedded_40(u32 key)
 	return result;
 }
 
-t_key Key_embedded_48(u32 key)
+static t_key key_embedded_48(u32 key)
 {
-	t_key result = Key_zero();
+	t_key result = { 0 };
 
 	result.s6_addr[10] = key % 256;
 	key /= 256;
@@ -326,9 +311,9 @@ t_key Key_embedded_48(u32 key)
 	return result;
 }
 
-t_key Key_embedded_56(u32 key)
+static t_key key_embedded_56(u32 key)
 {
-	t_key result = Key_zero();
+	t_key result = { 0 };
 
 	result.s6_addr[11] = key % 256;
 	key /= 256;
@@ -343,9 +328,9 @@ t_key Key_embedded_56(u32 key)
 	return result;
 }
 
-t_key Key_embedded_64(u32 key)
+static t_key key_embedded_64(u32 key)
 {
-	t_key result = Key_zero();
+	t_key result = { 0 };
 
 	result.s6_addr[12] = key % 256;
 	key /= 256;
@@ -360,7 +345,7 @@ t_key Key_embedded_64(u32 key)
 	return result;
 }
 
-t_key Key_addone(t_key *key)
+static t_key key_addone(t_key *key)
 {
 	int i;
 	t_key result = *key;
@@ -373,7 +358,7 @@ t_key Key_addone(t_key *key)
 	return result;
 }
 
-unsigned long Key_fls(t_key *key)
+static unsigned long key_fls(t_key *key)
 {
 	int i;
 	unsigned long result;
@@ -395,7 +380,7 @@ unsigned long Key_fls(t_key *key)
 	return result;
 }
 
-unsigned long Key_frs(t_key *key)
+static unsigned long key_frs(t_key *key)
 {
 	int i;
 	unsigned long result;
@@ -418,7 +403,7 @@ unsigned long Key_frs(t_key *key)
 	return result;
 }
 
-bool Key_isPrivate(u32 key)
+static bool key_isPrivate(u32 key)
 {
 	int pA = (key >> 24 == 10);
 	int pB = (key << 8 >> 28 == 1) && (key >> 24 == 172);
@@ -426,7 +411,7 @@ bool Key_isPrivate(u32 key)
 	return pA | pB | pC;
 }
 
-int Key_form(u32 key)
+static int key_form(u32 key)
 {
 	int judge = key >> 24;
 	int form = (key << 8 >> 24) - 10;
@@ -435,35 +420,40 @@ int Key_form(u32 key)
 	return form;
 }
 
-bool Key_mismatch(t_key *a, t_key *b)
+static bool key_mismatch(t_key *a, t_key *b)
 {
-	t_key compare = Key_xor(a, b);
-	return (Key_fls(&compare) >= Key_frs(b));
+	t_key compare = key_xor(a, b);
+	return (key_fls(&compare) >= key_frs(b));
 }
 
-bool Key_greater(t_key *a, t_key *b)
+static bool key_greater(t_key *a, t_key *b)
 {
 	int i;
 	for (i = 0; i < 16; i++) {
 		if (a->s6_addr[i] > b->s6_addr[i]) {
 			return true;
 		}
-	}
-	return false;
-}
-
-bool Key_nzero(t_key *key)
-{
-	int i;
-	for (i = 0; i < 16; i++) {
-		if (key->s6_addr[i]) {
-			return true;
+		if (a->s6_addr[i] < b->s6_addr[i]) {
+			return false;
 		}
 	}
 	return false;
 }
 
-static inline const char *Key_type(t_key key)
+static bool key_nzero(t_key *key)
+{
+	int i;
+	/*for (i = 0; i < 16; i++) {
+		if (key->s6_addr[i]) {
+			return true;
+		}
+	}*/
+	if (*(u64*)(key->s6_addr) || *(u64*)(key->s6_addr + 8))
+		return true;
+	return false;
+}
+
+static inline const char *key_type(t_key key)
 {
 	/*
 	    if (t < __RTN_MAX && rtn_type_names[t])
@@ -602,10 +592,10 @@ static inline unsigned long child_length(const struct key_vector *tn)
 #if IS_ENABLED(CONFIG_IP_6IN4)
 static inline unsigned long get_cindex(t_key *key, struct key_vector *kv)
 {
-	t_key k_index = Key_xor(key, &(kv->key));
+	t_key k_index = key_xor(key, &(kv->key));
 	unsigned long index;
-	k_index = Key_shift_right(&k_index, kv->pos);
-	index = Key_toint(&k_index);
+	k_index = key_shift_right(&k_index, kv->pos);
+	index = key_toint(&k_index);
 
 	return index;
 }
@@ -616,10 +606,10 @@ static inline unsigned long get_cindex(t_key *key, struct key_vector *kv)
 static inline unsigned long get_index(t_key key, struct key_vector *kv)
 {
 #if IS_ENABLED(CONFIG_IP_6IN4)
-	t_key k_index = Key_xor(&key, &(kv->key));
+	t_key k_index = key_xor(&key, &(kv->key));
 	unsigned long index;
-	k_index = Key_shift_right(&k_index, kv->pos);
-	index = Key_toint(&k_index);
+	k_index = key_shift_right(&k_index, kv->pos);
+	index = key_toint(&k_index);
 #else
 	unsigned long index = key ^ kv->key;
 #endif
@@ -800,12 +790,12 @@ static struct key_vector *tnode_new(t_key key, int pos, int bits)
 	tn = tnode->kv;
 #if IS_ENABLED(CONFIG_IP_6IN4)
 	if (shift < KEYLENGTH) {
-		t_key tmp = Key_shift_right(&key, shift);
-		tn->key = Key_shift_left(&tmp, shift);
+		t_key tmp = key_shift_right(&key, shift);
+		tn->key = key_shift_left(&tmp, shift);
 	} 
 	else 
 	{
-		tn->key = Key_zero();
+		memset(&(tn->key), 0, 16);
 	}
 #else
 	tn->key = (shift < KEYLENGTH) ? (key >> shift) << shift : 0;
@@ -969,7 +959,7 @@ static struct key_vector *inflate(struct trie *t,
 	 * nodes.
 	 */
 #if IS_ENABLED(CONFIG_IP_6IN4)
-	for (i = child_length(oldtnode), m = Key_fromint(1u << tn->pos); i;) {
+	for (i = child_length(oldtnode), m = key_fromint(1u << tn->pos); i;) {
 #else
 	for (i = child_length(oldtnode), m = 1u << tn->pos; i;) {
 #endif				
@@ -1012,7 +1002,7 @@ static struct key_vector *inflate(struct trie *t,
 		 * two new keys.
 		 */
 #if IS_ENABLED(CONFIG_IP_6IN4)
-		node1 = tnode_new(Key_or(&(inode->key), &m), inode->pos,
+		node1 = tnode_new(key_or(&(inode->key), &m), inode->pos,
 				  inode->bits - 1);
 #else
 		node1 = tnode_new(inode->key | m, inode->pos, inode->bits - 1);
@@ -1281,7 +1271,7 @@ static struct key_vector *resize(struct trie *t, struct key_vector *tn)
 	struct key_vector *tpp = node_parent(tp);
 	
 	int i;
-	__be32 val = htonl(Key_toint(&(tp->key)));
+	__be32 val = htonl(key_toint(&(tp->key)));
 	for (i = 0; i < 12; ++i) {
 		printk("%02x", tp->key.s6_addr[i]);
 		if (i % 2 == 1)
@@ -1289,14 +1279,14 @@ static struct key_vector *resize(struct trie *t, struct key_vector *tn)
 	}
 	printk("%pI4\n  %d %d", &val, tp->pos, tp->bits);
 
-	val = htonl(Key_toint(&(test->key)));
+	val = htonl(key_toint(&(test->key)));
 	for (i = 0; i < 12; ++i) {
 		printk("%02x", test->key.s6_addr[i]);
 		if (i % 2 == 1)
 			printk(":");
 	}
 	printk("%pI4\n %d  %d", &val, test->pos,test->bits);
-	val = htonl(Key_toint(&(tn->key)));
+	val = htonl(key_toint(&(tn->key)));
 	for (i = 0; i < 12; ++i) {
 		printk("%02x", tn->key.s6_addr[i]);
 		if (i % 2 == 1)
@@ -1304,7 +1294,7 @@ static struct key_vector *resize(struct trie *t, struct key_vector *tn)
 	}
 	printk("%pI4\n  %d %d", &val, tn->pos, tn->bits);
 	
-	val = htonl(Key_toint(&(tpp->key)));
+	val = htonl(key_toint(&(tpp->key)));
 	for (i = 0; i < 12; ++i) {
 		printk("%02x", tpp->key.s6_addr[i]);
 		if (i % 2 == 1)
@@ -1416,7 +1406,8 @@ static struct key_vector *fib_find_node(struct trie *t,
 			break;
 #if IS_ENABLED(CONFIG_IP_6IN4)
 		index = get_cindex(&key, n);
-#else		index = get_cindex(key, n);
+#else
+		index = get_cindex(key, n);
 #endif
 		/* This bit of code is a bit tricky but it combines multiple
 		 * checks into a single check.  The prefix consists of the
@@ -1486,7 +1477,7 @@ static int fib_insert_node(struct trie *t, struct key_vector *tp,
 	struct key_vector *n, *l;
 #if IS_ENABLED(CONFIG_IP_6IN4)
 	int i;
-	__be32 val = htonl(Key_toint(&(tp->key)));
+	__be32 val = htonl(key_toint(&(tp->key)));
 #endif
 	
 	l = leaf_new(key, new);
@@ -1506,8 +1497,8 @@ static int fib_insert_node(struct trie *t, struct key_vector *tp,
 		struct key_vector *tn;
 
 #if IS_ENABLED(CONFIG_IP_6IN4)
-		t_key tmp = Key_xor(&key, &(n->key));
-		tn = tnode_new(key, Key_fls(&tmp), 1);
+		t_key tmp = key_xor(&key, &(n->key));
+		tn = tnode_new(key, key_fls(&tmp), 1);
 #else
 		tn = tnode_new(key, __fls(key ^ n->key), 1);
 #endif		
@@ -1628,31 +1619,31 @@ int fib_table_insert(struct net *net, struct fib_table *tb,
 
 	key = ntohl(cfg->fc_dst);
 #if IS_ENABLED(CONFIG_IP_6IN4)
-	i = Key_form(key);
+	i = key_form(key);
 	switch (i) {
 	case 0:
-		tkey = Key_map(key);
+		tkey = key_map(key);
 		break;
 	case 1:
-		tkey = Key_compatible(key);
+		tkey = key_compatible(key);
 		break;
 	case 2:
-		tkey = Key_embedded_32(key);
+		tkey = key_embedded_32(key);
 		break;
 	case 3:
-		tkey = Key_embedded_40(key);
+		tkey = key_embedded_40(key);
 		break;
 	case 4:
-		tkey = Key_embedded_48(key);
+		tkey = key_embedded_48(key);
 		break;
 	case 5:
-		tkey = Key_embedded_56(key);
+		tkey = key_embedded_56(key);
 		break;
 	case 6:
-		tkey = Key_embedded_64(key);
+		tkey = key_embedded_64(key);
 		break;
 	default:
-		tkey = Key_compatible(key);
+		tkey = key_compatible(key);
 		break;
 	}
 #endif
@@ -1837,7 +1828,7 @@ static inline bool prefix_mismatch(t_key key, struct key_vector *n)
 {
 	t_key prefix = n->key;
 
-	return Key_mismatch(&key, &prefix);
+	return key_mismatch(&key, &prefix);
 }
 #else
 static inline t_key prefix_mismatch(t_key key, struct key_vector *n)
@@ -1872,10 +1863,10 @@ int fib_table_lookup(struct fib_table *tb, const struct flowi4 *flp,
 #endif
 
 #if IS_ENABLED(CONFIG_IP_6IN4)
-	if (Key_isPrivate(key)) {
-		tkey = Key_map(key);
+	if (key_isPrivate(key)) {
+		tkey = key_map(key);
 	} else {
-		tkey = Key_compatible(key);
+		tkey = key_compatible(key);
 	}
 #endif
 	pn = t->kv;
@@ -2000,8 +1991,8 @@ int fib_table_lookup(struct fib_table *tb, const struct flowi4 *flp,
 found:
 	/* this line carries forward the xor from earlier in the function */
 #if IS_ENABLED(CONFIG_IP_6IN4)
-	tmp = Key_xor(&tkey, &(n->key));
-	index = Key_toint(&tmp);
+	tmp = key_xor(&tkey, &(n->key));
+	index = key_toint(&tmp);
 #else
 	index = key ^ n->key;
 #endif
@@ -2057,7 +2048,7 @@ found:
 				refcount_inc(&fi->fib_clntref);
 
 #if IS_ENABLED(CONFIG_IP_6IN4)
-			res->prefix = htonl(Key_toint(&(n->key)));
+			res->prefix = htonl(key_toint(&(n->key)));
 			res->prefixlen = 32 - fa->fa_slen;
 #else
 			res->prefix = htonl(n->key);
@@ -2137,10 +2128,10 @@ int fib_table_delete(struct net *net, struct fib_table *tb,
 	key = ntohl(cfg->fc_dst);
 
 #if IS_ENABLED(CONFIG_IP_6IN4)
-	if (Key_isPrivate(key)) {
-		tkey = Key_map(key);
+	if (key_isPrivate(key)) {
+		tkey = key_map(key);
 	} else {
-		tkey = Key_compatible(key);
+		tkey = key_compatible(key);
 	}
 #endif
 	if (!fib_valid_key_len(key, plen, extack))
@@ -2215,7 +2206,7 @@ static struct key_vector *leaf_walk_rcu(struct key_vector **tn, t_key key)
 		/* record parent and next child index */
 		pn = n;
 #if IS_ENABLED(CONFIG_IP_6IN4)
-		cindex = Key_greater(&key, &(pn->key)) ? get_index(key, pn) : 0;
+		cindex = key_greater(&key, &(pn->key)) ? get_index(key, pn) : 0;
 #else
 		cindex = (key > pn->key) ? get_index(key, pn) : 0;
 #endif
@@ -2230,7 +2221,7 @@ static struct key_vector *leaf_walk_rcu(struct key_vector **tn, t_key key)
 
 		/* guarantee forward progress on the keys */
 #if IS_ENABLED(CONFIG_IP_6IN4)
-		if (IS_LEAF(n) && !Key_greater(&key, &(n->key)))
+		if (IS_LEAF(n) && !key_greater(&key, &(n->key)))
 #else
 		if (IS_LEAF(n) && (n->key >= key))
 #endif
@@ -2336,7 +2327,7 @@ struct fib_table *fib_trie_unmerge(struct fib_table *oldtb)
 	struct fib_alias *fa;
 	struct trie *lt;
 #if IS_ENABLED(CONFIG_IP_6IN4)
-	t_key key = Key_zero();
+	t_key key = { 0 };
 #else
 	t_key key = 0;
 #endif
@@ -2379,7 +2370,7 @@ struct fib_table *fib_trie_unmerge(struct fib_table *oldtb)
 
 		/* stop loop if key wrapped back to 0 */
 #if IS_ENABLED(CONFIG_IP_6IN4)
-		key = Key_addone(&(l->key));
+		key = key_addone(&(l->key));
 #else
 		key = l->key + 1;
 		if (key < l->key)
@@ -2529,7 +2520,7 @@ int fib_table_flush(struct net *net, struct fib_table *tb, bool flush_all)
 
 #if IS_ENABLED(CONFIG_IP_6IN4)
 			call_fib_entry_notifiers(net, FIB_EVENT_ENTRY_DEL,
-						 Key_toint(&(n->key)),
+						 key_toint(&(n->key)),
 						 32 - fa->fa_slen, fa, NULL);
 #else
 			call_fib_entry_notifiers(net, FIB_EVENT_ENTRY_DEL,
@@ -2575,7 +2566,7 @@ static void fib_leaf_notify(struct net *net, struct key_vector *l,
 
 #if IS_ENABLED(CONFIG_IP_6IN4)
 			call_fib_entry_notifier(nb, net, FIB_EVENT_ENTRY_ADD,
-					Key_toint(&(l->key)), 32 - fa->fa_slen,
+					key_toint(&(l->key)), 32 - fa->fa_slen,
 					fa);
 #else
 		call_fib_entry_notifier(nb, net, FIB_EVENT_ENTRY_ADD, l->key,
@@ -2590,7 +2581,7 @@ static void fib_table_notify(struct net *net, struct fib_table *tb,
 	struct trie *t = (struct trie *)tb->tb_data;
 	struct key_vector *l, *tp = t->kv;
 #if IS_ENABLED(CONFIG_IP_6IN4)
-	t_key key = Key_zero();
+	t_key key = { 0 };
 #else
 	t_key key = 0;
 #endif
@@ -2599,7 +2590,7 @@ static void fib_table_notify(struct net *net, struct fib_table *tb,
 		fib_leaf_notify(net, l, tb, nb);
 
 #if IS_ENABLED(CONFIG_IP_6IN4)
-		key = Key_addone(&(l->key));
+		key = key_addone(&(l->key));
 #else
 		key = l->key + 1;
 		/* stop in case of wrap around */
@@ -2645,7 +2636,7 @@ static int fn_trie_dump_leaf(struct key_vector *l, struct fib_table *tb,
 {
 	unsigned int flags = NLM_F_MULTI;
 #if IS_ENABLED(CONFIG_IP_6IN4)
-	__be32 xkey = htonl(Key_toint(&(l->key)));
+	__be32 xkey = htonl(key_toint(&(l->key)));
 #else
 	__be32 xkey = htonl(l->key);
 #endif
@@ -2721,10 +2712,10 @@ int fib_table_dump(struct fib_table *tb, struct sk_buff *skb,
 
 	/*fixed*/
 	t_key tkey;
-	if (Key_isPrivate(key)) {
-		tkey = Key_map(key);
+	if (key_isPrivate(key)) {
+		tkey = key_map(key);
 	} else {
-		tkey = Key_compatible(key);
+		tkey = key_compatible(key);
 	}
 
 	while ((l = leaf_walk_rcu(&tp, tkey)) != NULL) {
@@ -2744,7 +2735,7 @@ int fib_table_dump(struct fib_table *tb, struct sk_buff *skb,
 
 		++count;
 #if IS_ENABLED(CONFIG_IP_6IN4)
-		tkey = Key_addone(&(l->key));
+		tkey = key_addone(&(l->key));
 #else
 		key = l->key + 1;
 #endif
@@ -3159,7 +3150,7 @@ static inline const char *rtn_type(char *buf, size_t len, u32 key)
 	    if (t < __RTN_MAX && rtn_type_names[t])
 	    	return rtn_type_names[t];
 	*/
-	if (Key_isPrivate(key))
+	if (key_isPrivate(key))
 		return "mapped";
 	else
 		return "compatible";
@@ -3190,7 +3181,7 @@ static int fib_trie_seq_show(struct seq_file *seq, void *v)
 
 	if (IS_TNODE(n)) {
 #if IS_ENABLED(CONFIG_IP_6IN4)
-		__be32 prf = htonl(Key_toint(&(n->key)));
+		__be32 prf = htonl(key_toint(&(n->key)));
 #else
 		__be32 prf = htonl(n->key);
 #endif
@@ -3215,7 +3206,7 @@ static int fib_trie_seq_show(struct seq_file *seq, void *v)
 #endif
 	} else {
 #if IS_ENABLED(CONFIG_IP_6IN4)
-		__be32 val = htonl(Key_toint(&(n->key)));
+		__be32 val = htonl(key_toint(&(n->key)));
 #else
 		__be32 val = htonl(n->key);
 #endif
@@ -3243,7 +3234,7 @@ static int fib_trie_seq_show(struct seq_file *seq, void *v)
 				   KEYLENGTH - fa->fa_slen,
 				   rtn_scope(buf1, sizeof(buf1),
 					     fa->fa_info->fib_scope),
-				   Key_type(n->key));
+				   key_type(n->key));
 #else
 			seq_printf(seq, "  /%zu %s %s",
 				   KEYLENGTH - fa->fa_slen,
@@ -3288,7 +3279,8 @@ static struct key_vector *fib_route_get_idx(struct fib_route_iter *iter,
 	} else {
 		iter->pos = 1;
 #if IS_ENABLED(CONFIG_IP_6IN4)
-		key = Key_zero();
+		//key = key_zero();
+		memset(&key, 0, 16);
 #else
 		key = 0;
 #endif
@@ -3298,7 +3290,7 @@ static struct key_vector *fib_route_get_idx(struct fib_route_iter *iter,
 
 	while ((l = leaf_walk_rcu(tp, key)) && (pos-- > 0)) {
 #if IS_ENABLED(CONFIG_IP_6IN4)
-		key = Key_addone(&(l->key));
+		key = key_addone(&(l->key));
 #else
 		key = l->key + 1;
 #endif
@@ -3343,7 +3335,8 @@ static void *fib_route_seq_start(struct seq_file *seq, loff_t *pos)
 
 	iter->pos = 0;
 #if IS_ENABLED(CONFIG_IP_6IN4)
-	iter->key = Key_max();
+	//iter->key = key_max();
+	memset(&(iter->key), 1, 16);
 #else
 	iter->key = KEY_MAX;
 #endif
@@ -3356,7 +3349,7 @@ static void *fib_route_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 	struct fib_route_iter *iter = seq->private;
 	struct key_vector *l = NULL;
 #if IS_ENABLED(CONFIG_IP_6IN4)
-	t_key key = Key_addone(&(iter->key));
+	t_key key = key_addone(&(iter->key));
 #else
 	t_key key = iter->key + 1;
 #endif
@@ -3365,7 +3358,7 @@ static void *fib_route_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 
 	/* only allow key of 0 for start of sequence */
 #if IS_ENABLED(CONFIG_IP_6IN4)
-	if ((v == SEQ_START_TOKEN) || Key_nzero(&key))
+	if ((v == SEQ_START_TOKEN) || key_nzero(&key))
 #else
 	if ((v == SEQ_START_TOKEN) || key)
 #endif
@@ -3423,7 +3416,7 @@ static int fib_route_seq_show(struct seq_file *seq, void *v)
 	}
 
 #if IS_ENABLED(CONFIG_IP_6IN4) 
-	prefix = htonl(Key_toint(&(l->key)));
+	prefix = htonl(key_toint(&(l->key)));
 #else
 	prefix = htonl(l->key);
 #endif
