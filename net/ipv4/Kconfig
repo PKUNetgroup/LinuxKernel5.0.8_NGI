@@ -767,3 +767,11 @@ config IP_6IN4
 	---help---
 		If unsure, say N.
 
+config IP_6IN4_PREFIX
+	hex "IP: the configurable 6IN4 net prefix for the FIAR scheme"
+	range 0 0xffffffff
+	default 0
+	depends on IP_6IN4
+	---help---
+		The manager should configure this 32-bit prefix basing on the v6 prefix of the subnet 
+	

@@ -1569,7 +1569,7 @@ static int fib_insert_alias(struct trie *t, struct key_vector *tp,
 	return 0;
 }
 
-static bool fib_valid_key_len(u32 key, u8 plen, struct netlink_ext_ack *extack)
+static bool fib_valid_key_len(u32 key, u8 plen, struct netlink_ext_ack *extack)  //u32 key--> t_key key
 {
 #if IS_ENABLED(CONFIG_IP_6IN4)
 	if (plen > 32) {
@@ -1617,7 +1617,7 @@ int fib_table_insert(struct net *net, struct fib_table *tb,
 	int i;
 #endif
 
-	key = ntohl(cfg->fc_dst);
+	key = ntohl(cfg->fc_dst);   //--> tkey = cfg->fc_dst
 #if IS_ENABLED(CONFIG_IP_6IN4)
 	i = key_form(key);
 	switch (i) {
@@ -1648,7 +1648,7 @@ int fib_table_insert(struct net *net, struct fib_table *tb,
 	}
 #endif
 	
-	if (!fib_valid_key_len(key, plen, extack))
+	if (!fib_valid_key_len(key, plen, extack))  // -->if(!fib_valid_key_len(tkey, plen, extack))
 		return -EINVAL;
 
 	pr_debug("Insert table=%u %08x/%d\n", tb->tb_id, key, plen);
@@ -1848,7 +1848,7 @@ int fib_table_lookup(struct fib_table *tb, const struct flowi4 *flp,
 	struct trie_use_stats __percpu *stats = t->stats;
 #endif
 #if IS_ENABLED(CONFIG_IP_6IN4)
-	const unsigned long key = ntohl(flp->daddr);
+	const unsigned long key = ntohl(flp->daddr);  //-->t_key tkey = flp->daddr;
 	t_key tkey, tmp;
 #else
 	const t_key key = ntohl(flp->daddr);
@@ -2131,10 +2131,10 @@ int fib_table_delete(struct net *net, struct fib_table *tb,
 	if (key_isPrivate(key)) {
 		tkey = key_map(key);
 	} else {
-		tkey = key_compatible(key);
+		tkey = key_compatible(key);  //--> tkey = cfg->fc_dst;
 	}
 #endif
-	if (!fib_valid_key_len(key, plen, extack))
+	if (!fib_valid_key_len(key, plen, extack))  //--> fib_valid_key_len(tkey ...
 		return -EINVAL;
 
 #if IS_ENABLED(CONFIG_IP_6IN4)
